@@ -1,0 +1,75 @@
+name: u
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: u
+  cancel-in-progress: false
+
+jobs:
+  u:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: a
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.R }}
+          token: ${{ secrets.T }}
+          ref: main
+          path: .r
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: b
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: c
+        working-directory: .r
+        env:
+          PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.K }}
+        run: node scripts/ci.mjs 1
+
+      - name: d
+        shell: bash
+        env:
+          R: ${{ secrets.R }}
+          T: ${{ secrets.T }}
+        run: |
+          set -euo pipefail
+          test -n "$R"
+          test -n "$T"
+          test -f .r/dist/index.html
+
+          source_sha="$(git -C .r rev-parse HEAD)"
+          cd .r/dist
+          rm -rf .git
+          git init -q
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -q -b dist
+          git add -A
+          git commit -q -m "dist: ${source_sha}"
+
+          askpass="$RUNNER_TEMP/.a"
+          cat > "$askpass" <<'SH'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$T" ;;
+            *) exit 1 ;;
+          esac
+          SH
+          chmod 700 "$askpass"
+          printf -v remote '%s%s/%s.git' 'https:' '//github.com' "$R"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
+            git push -q -f "$remote" dist
+          rm -f "$askpass"
+          echo ok
